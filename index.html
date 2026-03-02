@@ -411,6 +411,11 @@ const ctx = canvas.getContext('2d');
 const img = document.getElementById('base-map');
 const container = document.getElementById('map-container');
 
+// Offscreen canvas used as a land mask
+const maskCanvas = document.createElement('canvas');
+const maskCtx = maskCanvas.getContext('2d');
+let maskReady = false;
+
 let tool = 'draw';
 let isDrawing = false;
 let currentPath = [];
