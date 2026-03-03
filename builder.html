@@ -53,6 +53,7 @@
     </header>
 
     <main class="flex-1 flex overflow-hidden">
+        <!-- Sidebar -->
         <aside class="w-52 bg-white border-r border-slate-200 p-4 flex flex-col gap-6 shadow-xl z-20">
             <section>
                 <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 text-center">Mode Selection</h3>
@@ -90,9 +91,9 @@
                     <div class="space-y-2">
                         <div class="flex justify-between items-center">
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Opacity</label>
-                            <span id="opacityLabel" class="text-[9px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">40%</span>
+                            <span id="opacityLabel" class="text-[9px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">55%</span>
                         </div>
-                        <input id="opacityPicker" type="range" min="0.1" max="1.0" step="0.05" value="0.4" oninput="updateCurrentStyle()" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <input id="opacityPicker" type="range" min="0.1" max="1.0" step="0.05" value="0.55" oninput="updateCurrentStyle()" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             </section>
@@ -126,7 +127,7 @@
                         
                         <g mask="url(#us-mask)">
                             <g mask="url(#exclusion-mask)">
-                                <path id="mainZonePath" d="" fill="#20462d" fill-opacity="0.4" />
+                                <path id="mainZonePath" d="" fill="#20462d" fill-opacity="0.55" />
                             </g>
                         </g>
 
