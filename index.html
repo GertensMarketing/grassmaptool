@@ -334,10 +334,10 @@
 <body>
 
 <header>
+  <img src="Small-BC-logo.png" alt="BC Logo" style="height:48px;width:48px;object-fit:contain;flex-shrink:0;">
   <div>
-    <h1>🌿 GrowZone Mapper</h1>
-    <div class="tagline">Grass Seed Regional Planning Tool</div>
-  </div>
+    <h1>Grow Zone Map Builder</h1>
+    </div>
 </header>
 
 <div class="main">
@@ -362,7 +362,7 @@
     <div class="sidebar-section">
       <h3>Active Zone Style</h3>
       <label class="field-label">Fill Color</label>
-      <input type="color" id="color-pick" value="#4a7c59" oninput="updateActiveZoneStyle()">
+      <input type="color" id="color-pick" value="#20462d" oninput="updateActiveZoneStyle()">
 
       <label class="field-label">Opacity</label>
       <input type="range" id="opacity-range" min="10" max="90" value="55" oninput="updateOpacityLabel(); updateActiveZoneStyle()">
@@ -401,6 +401,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<img src="Full-BC-logo.png" alt="Blades &amp; Clover" style="position:fixed;bottom:18px;right:18px;height:48px;opacity:0.5;pointer-events:none;z-index:10;">
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
@@ -426,7 +427,7 @@ let panOrigin = { x: 0, y: 0 };
 
 let imgBounds = { x: 0, y: 0, w: 0, h: 0 };
 
-const defaultColors = ['#4a7c59','#c8a951','#3a7abf','#c0522e','#7a4abf','#bf4a7a'];
+const defaultColors = ['#20462d','#c8a951','#3a7abf','#c0522e','#7a4abf','#bf4a7a'];
 
 function createZone(name, color) {
   return {
