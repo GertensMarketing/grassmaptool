@@ -220,6 +220,7 @@
   .btn-secondary:hover { background: #3a3a36; color: #fff; }
   .btn-danger { background: transparent; color: #c05; border: 1px solid #c05; }
   .btn-danger:hover { background: #c05; color: #fff; }
+  .tool-btn.erase-active { background: #8b2020; border-color: #c03030; color: #fff; }
 
   .map-area {
     flex: 1;
@@ -348,6 +349,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
         Draw Region
       </button>
+      <button class="tool-btn" id="btn-erase" onclick="setTool('erase')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/><path d="M6.5 17.5l5-5"/></svg>
+        Erase Region
+      </button>
       <button class="tool-btn" id="btn-pan" onclick="setTool('pan')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
         Pan / Navigate
@@ -429,7 +434,8 @@ function createZone(name, color) {
     color: color || defaultColors[zones.length % defaultColors.length],
     opacity: 55,
     stroke: 2,
-    paths: []
+    paths: [],
+    erasePaths: []
   };
 }
 
@@ -537,8 +543,12 @@ function setTool(t) {
   tool = t;
   document.getElementById('btn-draw').classList.toggle('active', t === 'draw');
   document.getElementById('btn-pan').classList.toggle('active', t === 'pan');
+  document.getElementById('btn-erase').classList.toggle('active', t === 'erase');
+  document.getElementById('btn-erase').classList.toggle('erase-active', t === 'erase');
   canvas.className = t === 'pan' ? 'pan-mode' : '';
-  setStatus(t === 'draw' ? 'Click and drag to draw a region' : 'Drag to pan the map');
+  setStatus(t === 'draw' ? 'Click and drag to draw a region' :
+            t === 'erase' ? 'Draw over filled areas to erase them' :
+            'Drag to pan the map');
 }
 
 function setStatus(msg) {
@@ -571,18 +581,28 @@ canvas.addEventListener('mouseup', () => {
   if (tool === 'pan') return;
   if (currentPath.length > 2) {
     currentPath.push(currentPath[0]);
-    zones[activeZoneIdx].paths.push(smoothPath([...currentPath]));
-    updateLegend();
+    const saved = smoothPath([...currentPath]);
+    if (tool === 'erase') {
+      zones[activeZoneIdx].erasePaths.push(saved);
+    } else {
+      zones[activeZoneIdx].paths.push(saved);
+      updateLegend();
+    }
   }
   currentPath = [];
   render();
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (isDrawing && tool === 'draw' && currentPath.length > 2) {
+  if (isDrawing && (tool === 'draw' || tool === 'erase') && currentPath.length > 2) {
     currentPath.push(currentPath[0]);
-    zones[activeZoneIdx].paths.push(smoothPath([...currentPath]));
-    updateLegend();
+    const saved = smoothPath([...currentPath]);
+    if (tool === 'erase') {
+      zones[activeZoneIdx].erasePaths.push(saved);
+    } else {
+      zones[activeZoneIdx].paths.push(saved);
+      updateLegend();
+    }
     currentPath = [];
     isDrawing = false;
     render();
@@ -636,10 +656,9 @@ function buildSmoothedPath(c, pts) {
 //   1. Draw the filled/stroked zone onto a temp canvas
 //   2. Use 'destination-in' composite with the map image so only land shows
 //   3. Blit the result onto the main canvas
-function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth) {
+function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth, erasePaths) {
   if (pts.length < 2) return;
 
-  // Temp canvas same size as display canvas
   const tmp = document.createElement('canvas');
   tmp.width = canvas.width;
   tmp.height = canvas.height;
@@ -660,15 +679,24 @@ function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth) {
   tc.lineCap = 'round';
   tc.stroke();
 
-  // 3. Clip to land: keep only pixels where the map image is light (land)
-  //    'destination-in' keeps existing pixels where the NEW source is opaque.
-  //    The map has white land and black water — black pixels are near-transparent
-  //    when drawn with a special approach. We draw the map with 'destination-in'
-  //    so the zone is only visible where the map is white (land).
+  // 3. Punch out erase paths using destination-out
+  if (erasePaths && erasePaths.length) {
+    tc.globalCompositeOperation = 'destination-out';
+    erasePaths.forEach(ep => {
+      if (ep.length < 2) return;
+      buildSmoothedPath(tc, ep);
+      tc.closePath();
+      tc.fillStyle = 'rgba(0,0,0,1)';
+      tc.fill();
+    });
+    tc.globalCompositeOperation = 'source-over';
+  }
+
+  // 4. Clip to land only
   tc.globalCompositeOperation = 'destination-in';
   tc.drawImage(maskCanvas, 0, 0);
 
-  // 4. Blit onto main canvas
+  // 5. Blit onto main canvas
   ctx.drawImage(tmp, 0, 0);
 }
 
@@ -683,7 +711,7 @@ function render() {
 
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
-      renderZoneWithLandClip(pts, fillColor, strokeColor, z.stroke);
+      renderZoneWithLandClip(pts, fillColor, strokeColor, z.stroke, z.erasePaths || []);
     });
   });
 }
@@ -691,19 +719,30 @@ function render() {
 function renderCurrentPath() {
   if (currentPath.length < 2) return;
   const z = zones[activeZoneIdx];
-  const fillColor = hexToRgba(z.color, (z.opacity / 100) * 0.6);
-  const strokeColor = hexToRgba(z.color, 0.9);
 
-  // For the live preview while drawing, also clip to land
-  renderZoneWithLandClip(currentPath, fillColor, strokeColor, z.stroke);
-
-  // Draw a dashed stroke outline on top (unclipped is fine for the guide line)
-  buildSmoothedPath(ctx, currentPath);
-  ctx.strokeStyle = hexToRgba(z.color, 0.5);
-  ctx.lineWidth = 1;
-  ctx.setLineDash([6, 3]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  if (tool === 'erase') {
+    // Show erase preview: red semi-transparent overlay with hatching
+    buildSmoothedPath(ctx, currentPath);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(180,30,30,0.25)';
+    ctx.fill();
+    buildSmoothedPath(ctx, currentPath);
+    ctx.strokeStyle = 'rgba(200,40,40,0.85)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    const fillColor = hexToRgba(z.color, (z.opacity / 100) * 0.6);
+    const strokeColor = hexToRgba(z.color, 0.9);
+    renderZoneWithLandClip(currentPath, fillColor, strokeColor, z.stroke, []);
+    buildSmoothedPath(ctx, currentPath);
+    ctx.strokeStyle = hexToRgba(z.color, 0.5);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 }
 
 // ── Legend ─────────────────────────────────────────────────────────────────
@@ -723,12 +762,18 @@ function updateLegend() {
 // ── Actions ────────────────────────────────────────────────────────────────
 function undoLast() {
   const z = zones[activeZoneIdx];
-  if (z && z.paths.length) { z.paths.pop(); updateLegend(); render(); showToast('Undid last region'); }
+  if (!z) return;
+  // Undo whichever was added most recently: erase or draw
+  if (tool === 'erase' && z.erasePaths && z.erasePaths.length) {
+    z.erasePaths.pop(); render(); showToast('Undid last erase');
+  } else if (z.paths.length) {
+    z.paths.pop(); updateLegend(); render(); showToast('Undid last region');
+  }
 }
 
 function clearAll() {
   if (!confirm('Clear all drawn regions?')) return;
-  zones.forEach(z => z.paths = []);
+  zones.forEach(z => { z.paths = []; z.erasePaths = []; });
   render();
   updateLegend();
   showToast('Cleared all regions');
@@ -752,49 +797,76 @@ function exportPNG() {
   const em = expMask.getContext('2d');
   em.drawImage(img, 0, 0, expMask.width, expMask.height);
 
-  // Scale factor from display coords to native image coords
-  const sx = exportCanvas.width / canvas.width;
-  const sy = exportCanvas.height / canvas.height;
+  // The drawn points are in canvas display-space, where the image is
+  // letterboxed inside imgBounds. To convert to native image coords:
+  //   1. Subtract the imgBounds offset (pan-adjusted) to get image-relative px
+  //   2. Divide by imgBounds.scale to get native image px
+  const offsetX = imgBounds.x + pan.x;
+  const offsetY = imgBounds.y + pan.y;
+  const dispScale = imgBounds.scale; // display px per native px
+
+  function toNative(pts) {
+    return pts.map(p => ({
+      x: (p.x - offsetX) / dispScale,
+      y: (p.y - offsetY) / dispScale
+    }));
+  }
+
+  // Build path helper for export context
+  function buildPath(c, spts) {
+    if (spts.length < 2) return;
+    c.beginPath();
+    c.moveTo(spts[0].x, spts[0].y);
+    for (let i = 1; i < spts.length - 2; i++) {
+      const xc = (spts[i].x + spts[i+1].x) / 2;
+      const yc = (spts[i].y + spts[i+1].y) / 2;
+      c.quadraticCurveTo(spts[i].x, spts[i].y, xc, yc);
+    }
+    const last = spts[spts.length-1], prev = spts[spts.length-2];
+    c.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
+  }
 
   zones.forEach(z => {
     if (!z.paths.length) return;
     const fillColor = hexToRgba(z.color, z.opacity / 100);
     const strokeColor = hexToRgba(z.color, Math.min(1, z.opacity / 100 + 0.35));
+    // Stroke width: drawn at display scale, convert back to native px
+    const nativeStroke = z.stroke / dispScale;
 
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
-      const scaled = pts.map(p => ({ x: p.x * sx, y: p.y * sy }));
+      const native = toNative(pts);
 
       const tmp = document.createElement('canvas');
       tmp.width = exportCanvas.width;
       tmp.height = exportCanvas.height;
       const tc = tmp.getContext('2d');
 
-      // Build path helper for export context
-      function buildPath(c, spts) {
-        c.beginPath();
-        c.moveTo(spts[0].x, spts[0].y);
-        for (let i = 1; i < spts.length - 2; i++) {
-          const xc = (spts[i].x + spts[i+1].x) / 2;
-          const yc = (spts[i].y + spts[i+1].y) / 2;
-          c.quadraticCurveTo(spts[i].x, spts[i].y, xc, yc);
-        }
-        const last = spts[spts.length-1], prev = spts[spts.length-2];
-        c.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-      }
-
-      buildPath(tc, scaled);
+      buildPath(tc, native);
       tc.closePath();
       tc.fillStyle = fillColor;
       tc.fill();
 
-      buildPath(tc, scaled);
+      buildPath(tc, native);
       tc.closePath();
       tc.strokeStyle = strokeColor;
-      tc.lineWidth = z.stroke * Math.max(sx, sy);
+      tc.lineWidth = nativeStroke;
       tc.lineJoin = 'round';
       tc.lineCap = 'round';
       tc.stroke();
+
+      // Punch out erase paths
+      if (z.erasePaths && z.erasePaths.length) {
+        tc.globalCompositeOperation = 'destination-out';
+        z.erasePaths.forEach(ep => {
+          if (ep.length < 2) return;
+          buildPath(tc, toNative(ep));
+          tc.closePath();
+          tc.fillStyle = 'rgba(0,0,0,1)';
+          tc.fill();
+        });
+        tc.globalCompositeOperation = 'source-over';
+      }
 
       // Clip to land
       tc.globalCompositeOperation = 'destination-in';
