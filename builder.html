@@ -54,7 +54,7 @@
     </header>
 
     <main class="flex-1 flex overflow-hidden">
-        <!-- Sidebar - Width reduced by 35% (from w-80 to w-52) -->
+        <!-- Sidebar -->
         <aside class="w-52 bg-white border-r border-slate-200 p-4 flex flex-col gap-6 shadow-xl z-20">
             <section>
                 <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 text-center">Mode Selection</h3>
@@ -381,19 +381,36 @@
             }
         }
 
+        /**
+         * EXPORT AT 1600x1000
+         */
         function exportMap() {
             const baseImg = document.getElementById('baseMap');
+            
+            // Target dimensions as requested
+            const EXPORT_WIDTH = 1600;
+            const EXPORT_HEIGHT = 1000;
+
+            // Calculate scale multipliers relative to our 800x500 map area in the UI
+            const scaleX = EXPORT_WIDTH / MAP_WIDTH;
+            const scaleY = EXPORT_HEIGHT / MAP_HEIGHT;
+
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = MAP_WIDTH;
-            canvas.height = MAP_HEIGHT;
+            canvas.width = EXPORT_WIDTH;
+            canvas.height = EXPORT_HEIGHT;
 
-            ctx.drawImage(baseImg, 0, 0, MAP_WIDTH, MAP_HEIGHT);
+            // 1. Draw Background Map stretched to target 1600x1000
+            ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
+            // 2. Offscreen Layer for shading
             const sCanvas = document.createElement('canvas');
-            sCanvas.width = MAP_WIDTH;
-            sCanvas.height = MAP_HEIGHT;
+            sCanvas.width = EXPORT_WIDTH;
+            sCanvas.height = EXPORT_HEIGHT;
             const sCtx = sCanvas.getContext('2d');
+            
+            // Apply scales to the UI coordinates
+            sCtx.scale(scaleX, scaleY);
             sCtx.translate(-MAP_X, -MAP_Y);
 
             regions.forEach(r => {
@@ -403,6 +420,7 @@
                 sCtx.fill(p);
             });
 
+            // 3. Eraser
             sCtx.globalAlpha = 1.0;
             sCtx.globalCompositeOperation = 'destination-out';
             eraserPaths.forEach(pData => {
@@ -410,20 +428,22 @@
                 sCtx.fill(p);
             });
 
-            sCtx.setTransform(1, 0, 0, 1, 0, 0);
+            // 4. Clipping to the Land mass alpha
+            sCtx.setTransform(1, 0, 0, 1, 0, 0); 
             sCtx.globalCompositeOperation = 'destination-in';
-            sCtx.drawImage(baseImg, 0, 0, MAP_WIDTH, MAP_HEIGHT);
+            sCtx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
+            // 5. Final Composite
             ctx.drawImage(sCanvas, 0, 0);
 
             try {
                 const url = canvas.toDataURL("image/png");
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `grass-seed-map-${Date.now()}.png`;
+                a.download = `growth-map-1600x1000-${Date.now()}.png`;
                 a.click();
             } catch (e) {
-                alert("Download failed. CORS restriction detected.\n\nFIX: Download the map image and upload it to your project folder on Netlify so it sits next to builder.html.");
+                alert("Download failed. CORS restriction detected.\n\nFIX: Ensure us-48.png is hosted on your Netlify domain sitting next to builder.html.");
             }
         }
 
