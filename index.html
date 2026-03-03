@@ -62,7 +62,6 @@
     overflow: hidden;
   }
 
-  /* SIDEBAR */
   .sidebar {
     width: 240px;
     background: var(--panel);
@@ -106,7 +105,6 @@
 
   .tool-btn:hover { background: #333330; border-color: #666; color: #fff; }
   .tool-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-
   .tool-btn svg { flex-shrink: 0; opacity: 0.8; }
 
   label.field-label {
@@ -142,7 +140,6 @@
     margin-top: 2px;
   }
 
-  /* ZONES LIST */
   .zone-item {
     display: flex;
     align-items: center;
@@ -224,7 +221,6 @@
   .btn-danger { background: transparent; color: #c05; border: 1px solid #c05; }
   .btn-danger:hover { background: #c05; color: #fff; }
 
-  /* MAP AREA */
   .map-area {
     flex: 1;
     position: relative;
@@ -316,7 +312,6 @@
     border-radius: 2px;
   }
 
-  /* Export toast */
   .toast {
     position: fixed;
     bottom: 24px;
@@ -345,7 +340,6 @@
 </header>
 
 <div class="main">
-  <!-- SIDEBAR -->
   <div class="sidebar">
 
     <div class="sidebar-section">
@@ -388,10 +382,9 @@
 
   </div>
 
-  <!-- MAP -->
   <div class="map-area">
     <div id="map-container">
-      <img id="base-map" src="us-48.png" alt="US 48 States Map" draggable="false">
+      <img id="base-map" src="us-48.png" alt="US 48 States Map" draggable="false" crossorigin="anonymous">
       <canvas id="drawing-canvas"></canvas>
     </div>
     <div class="status-bar" id="status-bar">Click and drag to draw a region</div>
@@ -411,7 +404,7 @@ const ctx = canvas.getContext('2d');
 const img = document.getElementById('base-map');
 const container = document.getElementById('map-container');
 
-// Offscreen canvas used as a land mask
+// Offscreen canvas: holds the map scaled to display size, used as a land mask
 const maskCanvas = document.createElement('canvas');
 const maskCtx = maskCanvas.getContext('2d');
 let maskReady = false;
@@ -422,12 +415,10 @@ let currentPath = [];
 let zones = [];
 let activeZoneIdx = 0;
 
-// Pan state
 let pan = { x: 0, y: 0 };
 let panStart = { x: 0, y: 0 };
 let panOrigin = { x: 0, y: 0 };
 
-// Image bounds (computed after load)
 let imgBounds = { x: 0, y: 0, w: 0, h: 0 };
 
 const defaultColors = ['#4a7c59','#c8a951','#3a7abf','#c0522e','#7a4abf','#bf4a7a'];
@@ -443,8 +434,20 @@ function createZone(name, color) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+function buildMask() {
+  // Draw the map image into an offscreen canvas at the same display size.
+  // The map is white land on black background — we use this as a clipping mask.
+  maskCanvas.width = canvas.width;
+  maskCanvas.height = canvas.height;
+  maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  if (img.naturalWidth && imgBounds.w) {
+    maskCtx.drawImage(img, imgBounds.x + pan.x, imgBounds.y + pan.y, imgBounds.w, imgBounds.h);
+  }
+  maskReady = true;
+}
+
 img.onload = () => { resizeCanvas(); addZone(); };
-img.onerror = () => { /* map image not found - still functional */ resizeCanvas(); addZone(); };
+img.onerror = () => { resizeCanvas(); addZone(); };
 if (img.complete && img.naturalWidth) { resizeCanvas(); addZone(); }
 
 window.addEventListener('resize', () => { resizeCanvas(); render(); });
@@ -453,6 +456,7 @@ function resizeCanvas() {
   canvas.width = container.offsetWidth;
   canvas.height = container.offsetHeight;
   computeImgBounds();
+  buildMask();
   render();
 }
 
@@ -496,7 +500,7 @@ function renderZonesList() {
     el.className = 'zone-item' + (i === activeZoneIdx ? ' active-zone' : '');
     el.innerHTML = `
       <div class="zone-swatch" style="background:${z.color}"></div>
-      <span class="zone-name" contenteditable="true" onfocus="event.stopPropagation()" 
+      <span class="zone-name" contenteditable="true" onfocus="event.stopPropagation()"
         onblur="zones[${i}].name=this.textContent.trim();updateLegend()">${z.name}</span>
       <button class="zone-del" onclick="event.stopPropagation();deleteZone(${i})">×</button>`;
     el.addEventListener('click', () => selectZone(i));
@@ -566,7 +570,6 @@ canvas.addEventListener('mouseup', () => {
   isDrawing = false;
   if (tool === 'pan') return;
   if (currentPath.length > 2) {
-    // Close path
     currentPath.push(currentPath[0]);
     zones[activeZoneIdx].paths.push(smoothPath([...currentPath]));
     updateLegend();
@@ -586,7 +589,6 @@ canvas.addEventListener('mouseleave', () => {
   }
 });
 
-// Touch support
 canvas.addEventListener('touchstart', (e) => { e.preventDefault(); simulateMouse('mousedown', e.touches[0]); }, { passive: false });
 canvas.addEventListener('touchmove', (e) => { e.preventDefault(); simulateMouse('mousemove', e.touches[0]); }, { passive: false });
 canvas.addEventListener('touchend', (e) => { e.preventDefault(); canvas.dispatchEvent(new MouseEvent('mouseup')); }, { passive: false });
@@ -602,32 +604,72 @@ function getPoint(e) {
 
 function applyPan() {
   img.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
+  buildMask();
   render();
 }
 
-// ── Smoothing (Catmull-Rom spline → bezier) ────────────────────────────────
+// ── Smoothing ─────────────────────────────────────────────────────────────
 function smoothPath(pts) {
   if (pts.length < 3) return pts;
-  // Subsample if too dense
   const step = Math.max(1, Math.floor(pts.length / 200));
-  const sampled = pts.filter((_, i) => i % step === 0);
-  return sampled;
+  return pts.filter((_, i) => i % step === 0);
 }
 
-function drawSmoothedPath(pts) {
+// Draw a smoothed quadratic bezier path onto a given context
+function buildSmoothedPath(c, pts) {
   if (pts.length < 2) return;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  
+  c.beginPath();
+  c.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length - 2; i++) {
     const xc = (pts[i].x + pts[i + 1].x) / 2;
     const yc = (pts[i].y + pts[i + 1].y) / 2;
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+    c.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
   }
-  // Last two points
   const last = pts[pts.length - 1];
   const prev = pts[pts.length - 2];
-  ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
+  c.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
+}
+
+// ── Land Mask Clipping ─────────────────────────────────────────────────────
+// Renders a zone path clipped to land pixels only, using the map as a mask.
+// Strategy:
+//   1. Draw the filled/stroked zone onto a temp canvas
+//   2. Use 'destination-in' composite with the map image so only land shows
+//   3. Blit the result onto the main canvas
+function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth) {
+  if (pts.length < 2) return;
+
+  // Temp canvas same size as display canvas
+  const tmp = document.createElement('canvas');
+  tmp.width = canvas.width;
+  tmp.height = canvas.height;
+  const tc = tmp.getContext('2d');
+
+  // 1. Draw the filled shape
+  buildSmoothedPath(tc, pts);
+  tc.closePath();
+  tc.fillStyle = fillColor;
+  tc.fill();
+
+  // 2. Draw the stroke on top
+  buildSmoothedPath(tc, pts);
+  tc.closePath();
+  tc.strokeStyle = strokeColor;
+  tc.lineWidth = strokeWidth;
+  tc.lineJoin = 'round';
+  tc.lineCap = 'round';
+  tc.stroke();
+
+  // 3. Clip to land: keep only pixels where the map image is light (land)
+  //    'destination-in' keeps existing pixels where the NEW source is opaque.
+  //    The map has white land and black water — black pixels are near-transparent
+  //    when drawn with a special approach. We draw the map with 'destination-in'
+  //    so the zone is only visible where the map is white (land).
+  tc.globalCompositeOperation = 'destination-in';
+  tc.drawImage(maskCanvas, 0, 0);
+
+  // 4. Blit onto main canvas
+  ctx.drawImage(tmp, 0, 0);
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -641,19 +683,7 @@ function render() {
 
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
-      // Fill
-      drawSmoothedPath(pts);
-      ctx.closePath();
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-      // Stroke
-      drawSmoothedPath(pts);
-      ctx.closePath();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = z.stroke;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.stroke();
+      renderZoneWithLandClip(pts, fillColor, strokeColor, z.stroke);
     });
   });
 }
@@ -662,15 +692,15 @@ function renderCurrentPath() {
   if (currentPath.length < 2) return;
   const z = zones[activeZoneIdx];
   const fillColor = hexToRgba(z.color, (z.opacity / 100) * 0.6);
-  
-  drawSmoothedPath(currentPath);
-  ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-  
-  drawSmoothedPath(currentPath);
-  ctx.strokeStyle = hexToRgba(z.color, 0.9);
-  ctx.lineWidth = z.stroke;
+  const strokeColor = hexToRgba(z.color, 0.9);
+
+  // For the live preview while drawing, also clip to land
+  renderZoneWithLandClip(currentPath, fillColor, strokeColor, z.stroke);
+
+  // Draw a dashed stroke outline on top (unclipped is fine for the guide line)
+  buildSmoothedPath(ctx, currentPath);
+  ctx.strokeStyle = hexToRgba(z.color, 0.5);
+  ctx.lineWidth = 1;
   ctx.setLineDash([6, 3]);
   ctx.stroke();
   ctx.setLineDash([]);
@@ -681,7 +711,6 @@ function updateLegend() {
   const legend = document.getElementById('map-legend');
   const items = document.getElementById('legend-items');
   const withPaths = zones.filter(z => z.paths.length > 0);
-  
   if (!withPaths.length) { legend.style.display = 'none'; return; }
   legend.style.display = 'block';
   items.innerHTML = withPaths.map(z => `
@@ -706,54 +735,72 @@ function clearAll() {
 }
 
 function exportPNG() {
-  // Composite: draw map + overlay canvas
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = img.naturalWidth || canvas.width;
   exportCanvas.height = img.naturalHeight || canvas.height;
   const ec = exportCanvas.getContext('2d');
 
-  // Draw base map
+  // Draw base map at full native resolution
   if (img.naturalWidth) {
     ec.drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
   }
 
-  // Scale zones to export canvas
+  // Build a full-res mask canvas
+  const expMask = document.createElement('canvas');
+  expMask.width = exportCanvas.width;
+  expMask.height = exportCanvas.height;
+  const em = expMask.getContext('2d');
+  em.drawImage(img, 0, 0, expMask.width, expMask.height);
+
+  // Scale factor from display coords to native image coords
   const sx = exportCanvas.width / canvas.width;
   const sy = exportCanvas.height / canvas.height;
-  
+
   zones.forEach(z => {
     if (!z.paths.length) return;
+    const fillColor = hexToRgba(z.color, z.opacity / 100);
+    const strokeColor = hexToRgba(z.color, Math.min(1, z.opacity / 100 + 0.35));
+
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
       const scaled = pts.map(p => ({ x: p.x * sx, y: p.y * sy }));
-      // Fill
-      ec.beginPath();
-      ec.moveTo(scaled[0].x, scaled[0].y);
-      for (let i = 1; i < scaled.length - 2; i++) {
-        const xc = (scaled[i].x + scaled[i+1].x) / 2;
-        const yc = (scaled[i].y + scaled[i+1].y) / 2;
-        ec.quadraticCurveTo(scaled[i].x, scaled[i].y, xc, yc);
+
+      const tmp = document.createElement('canvas');
+      tmp.width = exportCanvas.width;
+      tmp.height = exportCanvas.height;
+      const tc = tmp.getContext('2d');
+
+      // Build path helper for export context
+      function buildPath(c, spts) {
+        c.beginPath();
+        c.moveTo(spts[0].x, spts[0].y);
+        for (let i = 1; i < spts.length - 2; i++) {
+          const xc = (spts[i].x + spts[i+1].x) / 2;
+          const yc = (spts[i].y + spts[i+1].y) / 2;
+          c.quadraticCurveTo(spts[i].x, spts[i].y, xc, yc);
+        }
+        const last = spts[spts.length-1], prev = spts[spts.length-2];
+        c.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
       }
-      const last = scaled[scaled.length-1], prev = scaled[scaled.length-2];
-      ec.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-      ec.closePath();
-      ec.fillStyle = hexToRgba(z.color, z.opacity / 100);
-      ec.fill();
-      // Stroke (redo path)
-      ec.beginPath();
-      ec.moveTo(scaled[0].x, scaled[0].y);
-      for (let i = 1; i < scaled.length - 2; i++) {
-        const xc = (scaled[i].x + scaled[i+1].x) / 2;
-        const yc = (scaled[i].y + scaled[i+1].y) / 2;
-        ec.quadraticCurveTo(scaled[i].x, scaled[i].y, xc, yc);
-      }
-      ec.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-      ec.closePath();
-      ec.strokeStyle = hexToRgba(z.color, Math.min(1, z.opacity/100 + 0.35));
-      ec.lineWidth = z.stroke * sx;
-      ec.lineJoin = 'round';
-      ec.lineCap = 'round';
-      ec.stroke();
+
+      buildPath(tc, scaled);
+      tc.closePath();
+      tc.fillStyle = fillColor;
+      tc.fill();
+
+      buildPath(tc, scaled);
+      tc.closePath();
+      tc.strokeStyle = strokeColor;
+      tc.lineWidth = z.stroke * Math.max(sx, sy);
+      tc.lineJoin = 'round';
+      tc.lineCap = 'round';
+      tc.stroke();
+
+      // Clip to land
+      tc.globalCompositeOperation = 'destination-in';
+      tc.drawImage(expMask, 0, 0);
+
+      ec.drawImage(tmp, 0, 0);
     });
   });
 
