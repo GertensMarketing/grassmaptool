@@ -220,6 +220,10 @@
   .btn-secondary:hover { background: #3a3a36; color: #fff; }
   .btn-danger { background: transparent; color: #c05; border: 1px solid #c05; }
   .btn-danger:hover { background: #c05; color: #fff; }
+  .btn-undo-redo { background: #fff; color: #666; border: 1px solid #ccc; }
+  .btn-undo-redo:hover { background: #f0f0f0; color: #333; }
+  .undo-redo-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .undo-redo-row .action-btn { margin-bottom: 0; }
   .tool-btn.erase-active { background: #8b2020; border-color: #c03030; color: #fff; }
 
   .map-area {
@@ -375,13 +379,15 @@
     <div class="sidebar-section" style="flex:1">
       <h3>Zones</h3>
       <div id="zones-list"></div>
-      <button class="add-zone-btn" onclick="addZone()">+ New Zone</button>
     </div>
 
     <div class="sidebar-section">
       <h3>Actions</h3>
-      <button class="action-btn btn-primary" onclick="exportPNG()">⬇ Export PNG</button>
-      <button class="action-btn btn-secondary" onclick="undoLast()">↩ Undo Last</button>
+      <button class="action-btn btn-primary" onclick="exportPNG()">⬇ Download Image (.png)</button>
+      <div class="undo-redo-row">
+        <button class="action-btn btn-undo-redo" onclick="undoLast()">↩ Undo</button>
+        <button class="action-btn btn-undo-redo" onclick="redoLast()">↪ Redo</button>
+      </div>
       <button class="action-btn btn-danger" onclick="clearAll()">✕ Clear All</button>
     </div>
 
@@ -393,10 +399,6 @@
       <canvas id="drawing-canvas"></canvas>
     </div>
     <div class="status-bar" id="status-bar">Click and drag to draw a region</div>
-    <div class="legend" id="map-legend" style="display:none">
-      <h4>Legend</h4>
-      <div id="legend-items"></div>
-    </div>
   </div>
 </div>
 
@@ -431,12 +433,14 @@ const defaultColors = ['#20462d','#c8a951','#3a7abf','#c0522e','#7a4abf','#bf4a7
 
 function createZone(name, color) {
   return {
-    name: name || `Zone ${zones.length + 1}`,
+    name: name || `Growing Zone`,
     color: color || defaultColors[zones.length % defaultColors.length],
     opacity: 55,
     stroke: 2,
     paths: [],
-    erasePaths: []
+    erasePaths: [],
+    redoPaths: [],
+    redoErasePaths: []
   };
 }
 
@@ -508,13 +512,12 @@ function renderZonesList() {
     el.innerHTML = `
       <div class="zone-swatch" style="background:${z.color}"></div>
       <span class="zone-name" contenteditable="true" onfocus="event.stopPropagation()"
-        onblur="zones[${i}].name=this.textContent.trim();updateLegend()">${z.name}</span>
+        onblur="zones[${i}].name=this.textContent.trim()">${z.name}</span>
       <button class="zone-del" onclick="event.stopPropagation();deleteZone(${i})">×</button>`;
     el.addEventListener('click', () => selectZone(i));
     list.appendChild(el);
   });
-  updateLegend();
-}
+  }
 
 function syncControls() {
   const z = zones[activeZoneIdx];
@@ -585,10 +588,11 @@ canvas.addEventListener('mouseup', () => {
     const saved = smoothPath([...currentPath]);
     if (tool === 'erase') {
       zones[activeZoneIdx].erasePaths.push(saved);
+      zones[activeZoneIdx].redoErasePaths = [];
     } else {
       zones[activeZoneIdx].paths.push(saved);
-      updateLegend();
-    }
+      zones[activeZoneIdx].redoPaths = [];
+          }
   }
   currentPath = [];
   render();
@@ -600,10 +604,11 @@ canvas.addEventListener('mouseleave', () => {
     const saved = smoothPath([...currentPath]);
     if (tool === 'erase') {
       zones[activeZoneIdx].erasePaths.push(saved);
+      zones[activeZoneIdx].redoErasePaths = [];
     } else {
       zones[activeZoneIdx].paths.push(saved);
-      updateLegend();
-    }
+      zones[activeZoneIdx].redoPaths = [];
+          }
     currentPath = [];
     isDrawing = false;
     render();
@@ -746,44 +751,43 @@ function renderCurrentPath() {
   }
 }
 
-// ── Legend ─────────────────────────────────────────────────────────────────
-function updateLegend() {
-  const legend = document.getElementById('map-legend');
-  const items = document.getElementById('legend-items');
-  const withPaths = zones.filter(z => z.paths.length > 0);
-  if (!withPaths.length) { legend.style.display = 'none'; return; }
-  legend.style.display = 'block';
-  items.innerHTML = withPaths.map(z => `
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:${hexToRgba(z.color, z.opacity/100)};border:1.5px solid ${z.color}"></div>
-      ${z.name}
-    </div>`).join('');
-}
 
 // ── Actions ────────────────────────────────────────────────────────────────
 function undoLast() {
   const z = zones[activeZoneIdx];
   if (!z) return;
-  // Undo whichever was added most recently: erase or draw
   if (tool === 'erase' && z.erasePaths && z.erasePaths.length) {
-    z.erasePaths.pop(); render(); showToast('Undid last erase');
+    z.redoErasePaths.push(z.erasePaths.pop());
+    render(); showToast('Undone');
   } else if (z.paths.length) {
-    z.paths.pop(); updateLegend(); render(); showToast('Undid last region');
+    z.redoPaths.push(z.paths.pop());
+    render(); showToast('Undone');
+  }
+}
+
+function redoLast() {
+  const z = zones[activeZoneIdx];
+  if (!z) return;
+  if (tool === 'erase' && z.redoErasePaths && z.redoErasePaths.length) {
+    z.erasePaths.push(z.redoErasePaths.pop());
+    render(); showToast('Redone');
+  } else if (z.redoPaths && z.redoPaths.length) {
+    z.paths.push(z.redoPaths.pop());
+    render(); showToast('Redone');
   }
 }
 
 function clearAll() {
   if (!confirm('Clear all drawn regions?')) return;
-  zones.forEach(z => { z.paths = []; z.erasePaths = []; });
+  zones.forEach(z => { z.paths = []; z.erasePaths = []; z.redoPaths = []; z.redoErasePaths = []; });
   render();
-  updateLegend();
-  showToast('Cleared all regions');
+    showToast('Cleared all regions');
 }
 
 function exportPNG() {
   const exportCanvas = document.createElement('canvas');
-  exportCanvas.width = img.naturalWidth || canvas.width;
-  exportCanvas.height = img.naturalHeight || canvas.height;
+  exportCanvas.width = 1600;
+  exportCanvas.height = 1000;
   const ec = exportCanvas.getContext('2d');
 
   // Draw base map at full native resolution
