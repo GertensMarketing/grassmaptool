@@ -1,0 +1,399 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Download, Trash2, Edit3, Layers, Palette, MousePointer2, RefreshCcw, Eraser, Undo2, Redo2 } from 'lucide-react';
+
+const App = () => {
+  const [regions, setRegions] = useState([]);
+  const [eraserPaths, setEraserPaths] = useState([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentPoints, setCurrentPoints] = useState([]);
+  const [activeRegionIndex, setActiveRegionIndex] = useState(null);
+  const [currentColor, setCurrentColor] = useState('#4ade80');
+  const [currentOpacity, setCurrentOpacity] = useState(0.4);
+  const [tool, setTool] = useState('draw'); // 'draw', 'erase', 'select'
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  // Undo/Redo State
+  const [history, setHistory] = useState([{ regions: [], eraserPaths: [] }]);
+  const [historyStep, setHistoryStep] = useState(0);
+
+  const containerRef = useRef(null);
+
+  // The map image path. Once deployed, ensure us-48.png is in your public folder or accessible via this URL.
+  const MAP_URL = "https://chirpquiz.netlify.app/us-48.png";
+  
+  const WORKSPACE_WIDTH = 1100;
+  const WORKSPACE_HEIGHT = 750;
+  const MAP_WIDTH = 800;
+  const MAP_HEIGHT = 500;
+  const MAP_X = (WORKSPACE_WIDTH - MAP_WIDTH) / 2;
+  const MAP_Y = (WORKSPACE_HEIGHT - MAP_HEIGHT) / 2;
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDrawing) {
+        finishDrawing();
+      }
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, [isDrawing, currentPoints]);
+
+  const pushToHistory = (newRegions, newErasers) => {
+    const newHistory = history.slice(0, historyStep + 1);
+    newHistory.push({
+      regions: JSON.parse(JSON.stringify(newRegions)),
+      eraserPaths: [...newErasers]
+    });
+    setHistory(newHistory);
+    setHistoryStep(newHistory.length - 1);
+  };
+
+  const undo = () => {
+    if (historyStep > 0) {
+      const prevState = history[historyStep - 1];
+      setRegions(prevState.regions);
+      setEraserPaths(prevState.eraserPaths);
+      setHistoryStep(historyStep - 1);
+      setActiveRegionIndex(null);
+    }
+  };
+
+  const redo = () => {
+    if (historyStep < history.length - 1) {
+      const nextState = history[historyStep + 1];
+      setRegions(nextState.regions);
+      setEraserPaths(nextState.eraserPaths);
+      setHistoryStep(historyStep + 1);
+      setActiveRegionIndex(null);
+    }
+  };
+
+  const getSmoothingPath = (points) => {
+    if (points.length < 3) return "";
+    const simplified = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const prev = simplified[simplified.length - 1];
+      const curr = points[i];
+      const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+      if (dist > 4) simplified.push(curr);
+    }
+    if (simplified.length < 3) return "";
+    let d = `M ${simplified[0].x} ${simplified[0].y}`;
+    for (let i = 0; i < simplified.length - 1; i++) {
+      const p0 = simplified[i === 0 ? i : i - 1];
+      const p1 = simplified[i];
+      const p2 = simplified[i + 1];
+      const p3 = i + 2 < simplified.length ? simplified[i + 2] : p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    }
+    d += " Z";
+    return d;
+  };
+
+  const handleMouseDown = (e) => {
+    if (tool === 'select') return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setIsDrawing(true);
+    setCurrentPoints([{ x, y }]);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setCurrentPoints(prev => [...prev, { x, y }]);
+  };
+
+  const finishDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    if (currentPoints.length > 5) {
+      const pathData = getSmoothingPath(currentPoints);
+      if (pathData) {
+        if (tool === 'draw') {
+          const newRegion = {
+            path: pathData,
+            color: currentColor,
+            opacity: currentOpacity,
+            id: Date.now(),
+            name: `Region ${regions.length + 1}`
+          };
+          const nextRegions = [...regions, newRegion];
+          setRegions(nextRegions);
+          setActiveRegionIndex(nextRegions.length - 1);
+          pushToHistory(nextRegions, eraserPaths);
+        } else if (tool === 'erase') {
+          const nextErasers = [...eraserPaths, pathData];
+          setEraserPaths(nextErasers);
+          pushToHistory(regions, nextErasers);
+        }
+      }
+    }
+    setCurrentPoints([]);
+  };
+
+  const clearAll = () => {
+    if (window.confirm("Clear all data?")) {
+      setRegions([]);
+      setEraserPaths([]);
+      setActiveRegionIndex(null);
+      pushToHistory([], []);
+    }
+  };
+
+  const deleteRegion = (idx) => {
+    const nextRegions = regions.filter((_, i) => i !== idx);
+    setRegions(nextRegions);
+    if (activeRegionIndex === idx) setActiveRegionIndex(null);
+    pushToHistory(nextRegions, eraserPaths);
+  };
+
+  const clearErasures = () => {
+    setEraserPaths([]);
+    pushToHistory(regions, []);
+  };
+
+  const exportMap = () => {
+    const baseImg = new Image();
+    baseImg.crossOrigin = "anonymous";
+    baseImg.src = MAP_URL;
+
+    baseImg.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = MAP_WIDTH;
+      canvas.height = MAP_HEIGHT;
+
+      // Draw background map
+      ctx.drawImage(baseImg, 0, 0, MAP_WIDTH, MAP_HEIGHT);
+
+      // Create shading layer
+      const shadingCanvas = document.createElement('canvas');
+      shadingCanvas.width = MAP_WIDTH;
+      shadingCanvas.height = MAP_HEIGHT;
+      const sCtx = shadingCanvas.getContext('2d');
+      sCtx.translate(-MAP_X, -MAP_Y);
+
+      // 1. Draw Growth Areas
+      regions.forEach(region => {
+        const path = new Path2D(region.path);
+        sCtx.globalAlpha = region.opacity;
+        sCtx.fillStyle = region.color;
+        sCtx.fill(path);
+      });
+
+      // 2. Subtract Eraser Marks
+      sCtx.globalAlpha = 1.0;
+      sCtx.globalCompositeOperation = 'destination-out';
+      eraserPaths.forEach(p => {
+        const path = new Path2D(p);
+        sCtx.fill(path);
+      });
+
+      // 3. Clip to Land Mass (Land Lock)
+      sCtx.setTransform(1, 0, 0, 1, 0, 0);
+      sCtx.globalCompositeOperation = 'destination-in';
+      sCtx.drawImage(baseImg, 0, 0, MAP_WIDTH, MAP_HEIGHT);
+
+      // Final composite
+      ctx.drawImage(shadingCanvas, 0, 0);
+
+      try {
+        const url = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `seed-map-${new Date().getTime()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+        console.error("Export error:", e);
+        alert("Download failed. Note: Once deployed on your domain, this button will work automatically as long as the map image is hosted on the same site.");
+      }
+    };
+
+    baseImg.onerror = () => {
+      alert("Could not load the map image for export.");
+    };
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-slate-100 font-sans text-slate-900">
+      <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center z-20 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="bg-emerald-600 p-2 rounded-xl shadow-lg shadow-emerald-100">
+            <Edit3 className="text-white w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800 leading-tight">Seed Growth Mapper</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Internal Tool v3.0</p>
+          </div>
+        </div>
+        
+        <div className="flex gap-2 items-center">
+          <div className="flex border-r border-slate-200 pr-3 mr-1 gap-1">
+            <button 
+              onClick={undo}
+              disabled={historyStep === 0}
+              className={`p-2 rounded-lg transition-all ${historyStep === 0 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-500 hover:bg-slate-50 hover:text-emerald-600'}`}
+            >
+              <Undo2 size={20} />
+            </button>
+            <button 
+              onClick={redo}
+              disabled={historyStep === history.length - 1}
+              className={`p-2 rounded-lg transition-all ${historyStep === history.length - 1 ? 'text-slate-200 cursor-not-allowed' : 'text-slate-500 hover:bg-slate-50 hover:text-emerald-600'}`}
+            >
+              <Redo2 size={20} />
+            </button>
+          </div>
+
+          <button 
+            onClick={clearAll}
+            className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm font-semibold"
+          >
+            <RefreshCcw size={16} />
+            Reset All
+          </button>
+          <button 
+            onClick={exportMap}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-lg transition-all font-bold text-sm shadow-md ml-2"
+          >
+            <Download size={18} />
+            Download Map
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 flex overflow-hidden">
+        <aside className="w-80 bg-white border-r border-slate-200 p-6 flex flex-col gap-8 shadow-xl z-10">
+          <section>
+            <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Mode Selection</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setTool('draw')} className={`flex flex-col items-center py-4 rounded-2xl border-2 transition-all ${tool === 'draw' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-inner' : 'border-slate-50 hover:border-slate-200 text-slate-400'}`}>
+                <Edit3 size={20} className="mb-2" /><span className="text-[10px] font-bold uppercase">Draw</span>
+              </button>
+              <button onClick={() => setTool('erase')} className={`flex flex-col items-center py-4 rounded-2xl border-2 transition-all ${tool === 'erase' ? 'border-red-500 bg-red-50 text-red-700 shadow-inner' : 'border-slate-50 hover:border-slate-200 text-slate-400'}`}>
+                <Eraser size={20} className="mb-2" /><span className="text-[10px] font-bold uppercase">Erase</span>
+              </button>
+              <button onClick={() => setTool('select')} className={`flex flex-col items-center py-4 rounded-2xl border-2 transition-all ${tool === 'select' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-inner' : 'border-slate-50 hover:border-slate-200 text-slate-400'}`}>
+                <MousePointer2 size={20} className="mb-2" /><span className="text-[10px] font-bold uppercase">Inspect</span>
+              </button>
+            </div>
+          </section>
+
+          <section className="space-y-6">
+            <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Region Styling</h3>
+            <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 space-y-6">
+              <div className="space-y-3">
+                <label className="text-[11px] font-bold text-slate-500 flex items-center gap-2 uppercase">
+                  <Palette size={14} className="text-emerald-500" /> Shading Color
+                </label>
+                <div className="flex gap-2">
+                  <div className="w-12 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200 relative">
+                    <input type="color" value={activeRegionIndex !== null ? regions[activeRegionIndex].color : currentColor} onChange={(e) => {
+                      const val = e.target.value;
+                      if (activeRegionIndex !== null) {
+                        const updated = [...regions];
+                        updated[activeRegionIndex].color = val;
+                        setRegions(updated);
+                        pushToHistory(updated, eraserPaths);
+                      } else { setCurrentColor(val); }
+                    }} className="absolute inset-0 w-[150%] h-[150%] -translate-x-1/4 -translate-y-1/4 cursor-pointer" />
+                  </div>
+                  <input type="text" value={activeRegionIndex !== null ? regions[activeRegionIndex].color : currentColor} onChange={(e) => {
+                    const val = e.target.value;
+                    if (activeRegionIndex !== null) {
+                      const updated = [...regions];
+                      updated[activeRegionIndex].color = val;
+                      setRegions(updated);
+                      pushToHistory(updated, eraserPaths);
+                    } else { setCurrentColor(val); }
+                  }} className="flex-1 px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none font-mono uppercase" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Fill Opacity</label>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">{Math.round((activeRegionIndex !== null ? regions[activeRegionIndex].opacity : currentOpacity) * 100)}%</span>
+                </div>
+                <input type="range" min="0.1" max="1.0" step="0.05" value={activeRegionIndex !== null ? regions[activeRegionIndex].opacity : currentOpacity} onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (activeRegionIndex !== null) {
+                    const updated = [...regions];
+                    updated[activeRegionIndex].opacity = val;
+                    setRegions(updated);
+                    pushToHistory(updated, eraserPaths);
+                  } else { setCurrentOpacity(val); }
+                }} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+              </div>
+            </div>
+          </section>
+
+          <section className="flex-1 flex flex-col min-h-0">
+            <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4 flex items-center gap-2"><Layers size={14} /> Map Layers ({regions.length})</h3>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+              {eraserPaths.length > 0 && <button onClick={clearErasures} className="w-full py-2 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest border border-dashed border-red-100 rounded-xl mb-4 transition-colors">Clear Erasures ({eraserPaths.length})</button>}
+              {regions.map((region, idx) => (
+                <div key={region.id} onClick={() => setActiveRegionIndex(idx)} className={`group flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${activeRegionIndex === idx ? 'border-emerald-500 bg-white shadow-lg scale-[1.02]' : 'border-transparent hover:bg-slate-50 bg-white/50 text-slate-500'}`}>
+                  <div className="flex items-center gap-4"><div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: region.color }}></div><span className="text-sm font-bold truncate max-w-[120px]">{region.name}</span></div>
+                  <button onClick={(e) => { e.stopPropagation(); deleteRegion(idx); }} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        <section className="flex-1 bg-slate-100 flex items-center justify-center p-4 relative overflow-auto">
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+          <div className="relative p-2 bg-white rounded-2xl shadow-2xl border border-white">
+            <div ref={containerRef} className={`relative bg-slate-50 overflow-hidden rounded-xl select-none ${tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`} style={{ width: `${WORKSPACE_WIDTH}px`, height: `${WORKSPACE_HEIGHT}px` }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}>
+              <img src={MAP_URL} className="absolute pointer-events-none z-0 grayscale-[0.3] opacity-90 border border-slate-200" style={{ left: `${MAP_X}px`, top: `${MAP_Y}px`, width: `${MAP_WIDTH}px`, height: `${MAP_HEIGHT}px` }} onLoad={() => setImageLoaded(true)} />
+              <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox={`0 0 ${WORKSPACE_WIDTH} ${WORKSPACE_HEIGHT}`}>
+                <defs>
+                  <mask id="us-mask" maskContentUnits="userSpaceOnUse">
+                    {imageLoaded && (
+                      <image href={MAP_URL} x={MAP_X} y={MAP_Y} width={MAP_WIDTH} height={MAP_HEIGHT} preserveAspectRatio="none" />
+                    )}
+                  </mask>
+                  <mask id="exclusion-mask" maskContentUnits="userSpaceOnUse">
+                    <rect x="0" y="0" width="100%" height="100%" fill="white" />
+                    {eraserPaths.map((p, i) => <path key={i} d={p} fill="black" />)}
+                  </mask>
+                </defs>
+                <g mask="url(#us-mask)">
+                  <g mask="url(#exclusion-mask)">
+                    {regions.map((region, idx) => (
+                      <path key={region.id} d={region.path} fill={region.color} fillOpacity={region.opacity} className="transition-all duration-300" />
+                    ))}
+                  </g>
+                </g>
+                <g>
+                  {isDrawing && currentPoints.length > 1 && (
+                    <polyline points={currentPoints.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={tool === 'erase' ? "#ef4444" : currentColor} strokeWidth="2.5" strokeDasharray={tool === 'erase' ? "2 2" : "5 3"} />
+                  )}
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 px-8 py-3 bg-white/80 backdrop-blur shadow-sm border border-slate-200 rounded-full">
+             <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${tool === 'erase' ? 'bg-red-500 animate-pulse' : tool === 'draw' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{tool === 'erase' ? 'Subtraction' : tool === 'draw' ? 'Addition' : 'Inspection Mode'}</span>
+             </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+};
+
+export default App;
