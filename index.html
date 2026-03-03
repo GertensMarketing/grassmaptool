@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Grass Seed Zone Mapper</title>
+<title>JRK Grow Zone Map Builder</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap');
 
@@ -372,8 +372,6 @@
       <input type="range" id="opacity-range" min="10" max="90" value="55" oninput="updateOpacityLabel(); updateActiveZoneStyle()">
       <div class="opacity-val" id="opacity-label">55%</div>
 
-      <label class="field-label">Stroke</label>
-      <input type="range" id="stroke-range" min="1" max="5" value="2" step="0.5" oninput="updateActiveZoneStyle()">
     </div>
 
     <div class="sidebar-section" style="flex:1">
@@ -436,7 +434,6 @@ function createZone(name, color) {
     name: name || `Growing Zone`,
     color: color || defaultColors[zones.length % defaultColors.length],
     opacity: 55,
-    stroke: 2,
     paths: [],
     erasePaths: [],
     redoPaths: [],
@@ -524,7 +521,6 @@ function syncControls() {
   if (!z) return;
   document.getElementById('color-pick').value = z.color;
   document.getElementById('opacity-range').value = z.opacity;
-  document.getElementById('stroke-range').value = z.stroke;
   updateOpacityLabel();
 }
 
@@ -533,7 +529,6 @@ function updateActiveZoneStyle() {
   if (!z) return;
   z.color = document.getElementById('color-pick').value;
   z.opacity = parseInt(document.getElementById('opacity-range').value);
-  z.stroke = parseFloat(document.getElementById('stroke-range').value);
   renderZonesList();
   render();
 }
@@ -662,7 +657,7 @@ function buildSmoothedPath(c, pts) {
 //   1. Draw the filled/stroked zone onto a temp canvas
 //   2. Use 'destination-in' composite with the map image so only land shows
 //   3. Blit the result onto the main canvas
-function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth, erasePaths) {
+function renderZoneWithLandClip(pts, fillColor, erasePaths) {
   if (pts.length < 2) return;
 
   const tmp = document.createElement('canvas');
@@ -676,16 +671,7 @@ function renderZoneWithLandClip(pts, fillColor, strokeColor, strokeWidth, eraseP
   tc.fillStyle = fillColor;
   tc.fill();
 
-  // 2. Draw the stroke on top
-  buildSmoothedPath(tc, pts);
-  tc.closePath();
-  tc.strokeStyle = strokeColor;
-  tc.lineWidth = strokeWidth;
-  tc.lineJoin = 'round';
-  tc.lineCap = 'round';
-  tc.stroke();
-
-  // 3. Punch out erase paths using destination-out
+  // 2. Punch out erase paths using destination-out
   if (erasePaths && erasePaths.length) {
     tc.globalCompositeOperation = 'destination-out';
     erasePaths.forEach(ep => {
@@ -713,11 +699,10 @@ function render() {
   zones.forEach(z => {
     if (!z.paths.length) return;
     const fillColor = hexToRgba(z.color, z.opacity / 100);
-    const strokeColor = hexToRgba(z.color, Math.min(1, z.opacity / 100 + 0.35));
 
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
-      renderZoneWithLandClip(pts, fillColor, strokeColor, z.stroke, z.erasePaths || []);
+      renderZoneWithLandClip(pts, fillColor, z.erasePaths || []);
     });
   });
 }
@@ -740,8 +725,7 @@ function renderCurrentPath() {
     ctx.setLineDash([]);
   } else {
     const fillColor = hexToRgba(z.color, (z.opacity / 100) * 0.6);
-    const strokeColor = hexToRgba(z.color, 0.9);
-    renderZoneWithLandClip(currentPath, fillColor, strokeColor, z.stroke, []);
+    renderZoneWithLandClip(currentPath, fillColor, []);
     buildSmoothedPath(ctx, currentPath);
     ctx.strokeStyle = hexToRgba(z.color, 0.5);
     ctx.lineWidth = 1;
@@ -834,9 +818,6 @@ function exportPNG() {
   zones.forEach(z => {
     if (!z.paths.length) return;
     const fillColor = hexToRgba(z.color, z.opacity / 100);
-    const strokeColor = hexToRgba(z.color, Math.min(1, z.opacity / 100 + 0.35));
-    // Stroke width: drawn at display scale, convert back to native px
-    const nativeStroke = z.stroke / dispScale;
 
     z.paths.forEach(pts => {
       if (pts.length < 2) return;
@@ -851,14 +832,6 @@ function exportPNG() {
       tc.closePath();
       tc.fillStyle = fillColor;
       tc.fill();
-
-      buildPath(tc, native);
-      tc.closePath();
-      tc.strokeStyle = strokeColor;
-      tc.lineWidth = nativeStroke;
-      tc.lineJoin = 'round';
-      tc.lineCap = 'round';
-      tc.stroke();
 
       // Punch out erase paths
       if (z.erasePaths && z.erasePaths.length) {
