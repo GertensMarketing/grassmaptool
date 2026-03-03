@@ -31,7 +31,7 @@
             </div>
             <div>
                 <h1 class="text-lg font-bold text-slate-800 leading-tight">Seed Growth Mapper</h1>
-                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Standalone Tool v3.1</p>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Internal Tool v3.2</p>
             </div>
         </div>
         
@@ -116,14 +116,15 @@
             <div class="relative p-2 bg-white rounded-2xl shadow-2xl border border-white">
                 <div id="workspace" class="relative bg-slate-50 overflow-hidden rounded-xl select-none cursor-crosshair canvas-container">
                     
-                    <!-- Base Map -->
-                    <img id="baseMap" src="https://chirpquiz.netlify.app/us-48.png" class="absolute pointer-events-none z-0 grayscale-[0.3] opacity-90 border border-slate-200" style="left: 150px; top: 125px; width: 800px; height: 500px;">
+                    <!-- Base Map - Set to a relative path for your domain -->
+                    <img id="baseMap" src="us-48.png" class="absolute pointer-events-none z-0 grayscale-[0.3] opacity-90 border border-slate-200" style="left: 150px; top: 125px; width: 800px; height: 500px;" onerror="this.src='https://chirpquiz.netlify.app/us-48.png'">
 
                     <!-- Interaction SVG -->
                     <svg id="mainSvg" class="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 1100 750">
                         <defs>
                             <mask id="us-mask" maskContentUnits="userSpaceOnUse">
-                                <image href="https://chirpquiz.netlify.app/us-48.png" x="150" y="125" width="800" height="500" preserveAspectRatio="none" />
+                                <!-- Mask also points to relative path -->
+                                <image id="maskImage" href="us-48.png" x="150" y="125" width="800" height="500" preserveAspectRatio="none" />
                             </mask>
                             <mask id="exclusion-mask" maskContentUnits="userSpaceOnUse">
                                 <rect x="0" y="0" width="100%" height="100%" fill="white" />
@@ -158,7 +159,9 @@
         const MAP_HEIGHT = 500;
         const MAP_X = 150;
         const MAP_Y = 125;
-        const MAP_URL = "https://chirpquiz.netlify.app/us-48.png";
+        
+        // This MUST be the same folder as your builder.html on Netlify
+        const MAP_FILE = "us-48.png"; 
 
         // State
         let regions = [];
@@ -264,18 +267,15 @@
         }
 
         function render() {
-            // Render Shaded Regions
             regionsGroup.innerHTML = regions.map((r, i) => `
                 <path d="${r.path}" fill="${r.color}" fill-opacity="${r.opacity}" 
                 style="transition: all 0.3s;" />
             `).join('');
 
-            // Render Erasers
             eraserGroup.innerHTML = eraserPaths.map(p => `
                 <path d="${p}" fill="black" />
             `).join('');
 
-            // Render Sidebar List
             layerList.innerHTML = '';
             if (eraserPaths.length > 0) {
                 const eraseBtn = document.createElement('button');
@@ -339,7 +339,6 @@
             }
         }
 
-        // History Management
         function saveHistory() {
             history = history.slice(0, historyStep + 1);
             history.push({
@@ -393,7 +392,6 @@
             }
         }
 
-        // Export Function
         function exportMap() {
             const baseImg = document.getElementById('baseMap');
             const canvas = document.createElement('canvas');
@@ -404,7 +402,6 @@
             // Draw Background
             ctx.drawImage(baseImg, 0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-            // Offscreen Shading
             const sCanvas = document.createElement('canvas');
             sCanvas.width = MAP_WIDTH;
             sCanvas.height = MAP_HEIGHT;
@@ -438,11 +435,10 @@
                 a.download = `grass-seed-map-${Date.now()}.png`;
                 a.click();
             } catch (e) {
-                alert("Download failed. CORS restriction detected. Once deployed on your site, this will work automatically.");
+                alert("Download failed. CORS restriction detected.\n\nFIX: Download the map image and upload it to your project folder on Netlify so it sits next to builder.html.");
             }
         }
 
-        // Initialize empty state
         render();
     </script>
 </body>
