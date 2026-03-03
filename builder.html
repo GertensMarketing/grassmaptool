@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grow Zone Map Builder</title>
+    <title>JRK Grow Zone Map Builder</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
@@ -29,7 +29,7 @@
             <!-- Company Logo -->
             <img src="Small-BC-logo.png" alt="Logo" class="h-10 w-auto" onerror="this.src='https://jrkmapmaker.netlify.app/Small-BC-logo.png'">
             <div>
-                <h1 class="text-lg font-bold text-slate-800 leading-tight">Grow Zone Map Builder</h1>
+                <h1 class="text-lg font-bold text-slate-800 leading-tight">JRK Grow Zone Map Builder</h1>
             </div>
         </div>
         
@@ -381,17 +381,10 @@
             }
         }
 
-        /**
-         * EXPORT AT 1600x1000
-         */
         function exportMap() {
             const baseImg = document.getElementById('baseMap');
-            
-            // Target dimensions as requested
             const EXPORT_WIDTH = 1600;
             const EXPORT_HEIGHT = 1000;
-
-            // Calculate scale multipliers relative to our 800x500 map area in the UI
             const scaleX = EXPORT_WIDTH / MAP_WIDTH;
             const scaleY = EXPORT_HEIGHT / MAP_HEIGHT;
 
@@ -400,16 +393,13 @@
             canvas.width = EXPORT_WIDTH;
             canvas.height = EXPORT_HEIGHT;
 
-            // 1. Draw Background Map stretched to target 1600x1000
             ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
-            // 2. Offscreen Layer for shading
             const sCanvas = document.createElement('canvas');
             sCanvas.width = EXPORT_WIDTH;
             sCanvas.height = EXPORT_HEIGHT;
             const sCtx = sCanvas.getContext('2d');
             
-            // Apply scales to the UI coordinates
             sCtx.scale(scaleX, scaleY);
             sCtx.translate(-MAP_X, -MAP_Y);
 
@@ -420,7 +410,6 @@
                 sCtx.fill(p);
             });
 
-            // 3. Eraser
             sCtx.globalAlpha = 1.0;
             sCtx.globalCompositeOperation = 'destination-out';
             eraserPaths.forEach(pData => {
@@ -428,19 +417,17 @@
                 sCtx.fill(p);
             });
 
-            // 4. Clipping to the Land mass alpha
             sCtx.setTransform(1, 0, 0, 1, 0, 0); 
             sCtx.globalCompositeOperation = 'destination-in';
             sCtx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
-            // 5. Final Composite
             ctx.drawImage(sCanvas, 0, 0);
 
             try {
                 const url = canvas.toDataURL("image/png");
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `growth-map-1600x1000-${Date.now()}.png`;
+                a.download = `jrk-growth-map-1600x1000-${Date.now()}.png`;
                 a.click();
             } catch (e) {
                 alert("Download failed. CORS restriction detected.\n\nFIX: Ensure us-48.png is hosted on your Netlify domain sitting next to builder.html.");
