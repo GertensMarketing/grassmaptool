@@ -794,10 +794,14 @@ function exportPNG() {
   const offsetY = imgBounds.y + pan.y;
   const dispScale = imgBounds.scale; // display px per native px
 
+  // exportScale converts native image px → export canvas px
+  const exportScaleX = exportCanvas.width / img.naturalWidth;
+  const exportScaleY = exportCanvas.height / img.naturalHeight;
+
   function toNative(pts) {
     return pts.map(p => ({
-      x: (p.x - offsetX) / dispScale,
-      y: (p.y - offsetY) / dispScale
+      x: ((p.x - offsetX) / dispScale) * exportScaleX,
+      y: ((p.y - offsetY) / dispScale) * exportScaleY
     }));
   }
 
