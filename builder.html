@@ -26,8 +26,7 @@
     <!-- Header -->
     <header class="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center z-30 shadow-sm">
         <div class="flex items-center gap-4">
-            <!-- Company Logo -->
-            <img src="Small-BC-logo.png" alt="Logo" class="h-10 w-auto" onerror="this.src='https://jrkmapmaker.netlify.app/Small-BC-logo.png'">
+            <img id="headerLogo" src="Small-BC-logo.png" alt="Logo" class="h-10 w-auto" onerror="this.src='https://jrkmapmaker.netlify.app/Small-BC-logo.png'">
             <div>
                 <h1 class="text-lg font-bold text-slate-800 leading-tight">JRK Grow Zone Map Builder</h1>
             </div>
@@ -35,16 +34,16 @@
         
         <div class="flex gap-2 items-center">
             <div class="flex border-r border-slate-200 pr-3 mr-1 gap-1">
-                <button id="undoBtn" onclick="undo()" class="p-2 rounded-lg text-slate-200 transition-all" disabled>
+                <button id="undoBtn" onclick="undo()" class="p-2 rounded-lg text-slate-200 transition-all" disabled title="Undo (Ctrl+Z)">
                     <i data-lucide="undo-2"></i>
                 </button>
-                <button id="redoBtn" onclick="redo()" class="p-2 rounded-lg text-slate-200 transition-all" disabled>
+                <button id="redoBtn" onclick="redo()" class="p-2 rounded-lg text-slate-200 transition-all" disabled title="Redo (Ctrl+Y)">
                     <i data-lucide="redo-2"></i>
                 </button>
             </div>
             <button onclick="resetAll()" class="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm font-semibold">
                 <i data-lucide="refresh-ccw" class="w-4 h-4"></i>
-                Reset All
+                Reset Map
             </button>
             <button onclick="exportMap()" class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-lg transition-all font-bold text-sm shadow-md ml-2">
                 <i data-lucide="download" class="w-5 h-5"></i>
@@ -54,18 +53,17 @@
     </header>
 
     <main class="flex-1 flex overflow-hidden">
-        <!-- Sidebar -->
         <aside class="w-52 bg-white border-r border-slate-200 p-4 flex flex-col gap-6 shadow-xl z-20">
             <section>
                 <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 text-center">Mode Selection</h3>
                 <div class="grid grid-cols-1 gap-2">
                     <button id="drawTool" onclick="setTool('draw')" class="tool-active flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all">
                         <i data-lucide="edit-3" class="w-4 h-4"></i>
-                        <span class="text-[10px] font-bold uppercase">Draw</span>
+                        <span class="text-[10px] font-bold uppercase">Draw Area</span>
                     </button>
                     <button id="eraseTool" onclick="setTool('erase')" class="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-50 hover:border-slate-200 text-slate-400 transition-all">
                         <i data-lucide="eraser" class="w-4 h-4"></i>
-                        <span class="text-[10px] font-bold uppercase">Erase</span>
+                        <span class="text-[10px] font-bold uppercase">Erase Area</span>
                     </button>
                     <button id="inspectTool" onclick="setTool('inspect')" class="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-slate-50 hover:border-slate-200 text-slate-400 transition-all">
                         <i data-lucide="mouse-pointer-2" class="w-4 h-4"></i>
@@ -75,7 +73,7 @@
             </section>
 
             <section class="space-y-4">
-                <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest">Region Styling</h3>
+                <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest">Zone Styling</h3>
                 <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-4">
                     <div class="space-y-2">
                         <label class="text-[10px] font-bold text-slate-500 flex items-center gap-2 uppercase">
@@ -99,13 +97,10 @@
                 </div>
             </section>
 
-            <section class="flex-1 flex flex-col min-h-0">
-                <h3 class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-3 h-3"></i> Layers
-                </h3>
-                <div id="layerList" class="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-hide">
-                    <!-- Layers will appear here -->
-                </div>
+            <section class="flex-1 flex flex-col min-h-0 border-t border-slate-100 pt-6">
+                <p class="text-[10px] text-slate-400 font-medium leading-relaxed italic text-center">
+                    All drawn areas belong to a single Grow Zone. Use Undo to remove your last stroke.
+                </p>
             </section>
         </aside>
 
@@ -115,7 +110,7 @@
                 <div id="workspace" class="relative bg-slate-50 overflow-hidden rounded-xl select-none cursor-crosshair canvas-container">
                     
                     <!-- Base Map -->
-                    <img id="baseMap" src="us-48.png" class="absolute pointer-events-none z-0 grayscale-[0.3] opacity-90" style="left: 150px; top: 125px; width: 800px; height: 500px;" onerror="this.src='https://chirpquiz.netlify.app/us-48.png'">
+                    <img id="baseMap" src="us-48.png" class="absolute pointer-events-none z-0 grayscale-[0.3] opacity-90" style="left: 150px; top: 125px; width: 800px; height: 500px;" onload="onMapLoaded(this.src)" onerror="onMapError(this)">
 
                     <!-- Interaction SVG -->
                     <svg id="mainSvg" class="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 1100 750">
@@ -130,7 +125,9 @@
                         </defs>
                         
                         <g mask="url(#us-mask)">
-                            <g mask="url(#exclusion-mask)" id="regionsGroup"></g>
+                            <g mask="url(#exclusion-mask)">
+                                <path id="mainZonePath" d="" fill="#20462d" fill-opacity="0.4" />
+                            </g>
                         </g>
 
                         <polyline id="feedbackLine" points="" fill="none" stroke="#20462D" stroke-width="2.5" stroke-dasharray="5 3" />
@@ -155,28 +152,48 @@
         const MAP_HEIGHT = 500;
         const MAP_X = 150;
         const MAP_Y = 125;
-        const MAP_FILE = "us-48.png"; 
+        const FALLBACK_URL = 'https://chirpquiz.netlify.app/us-48.png';
 
-        let regions = [];
+        // State
+        let drawnPaths = []; 
         let eraserPaths = [];
-        let history = [{ regions: [], eraserPaths: [] }];
+        let history = [{ drawnPaths: [], eraserPaths: [] }];
         let historyStep = 0;
         let isDrawing = false;
         let currentPoints = [];
-        let activeRegionIndex = null;
         let currentTool = 'draw';
 
         const workspace = document.getElementById('workspace');
         const feedbackLine = document.getElementById('feedbackLine');
-        const regionsGroup = document.getElementById('regionsGroup');
+        const mainZonePath = document.getElementById('mainZonePath');
         const eraserGroup = document.getElementById('eraserGroup');
-        const layerList = document.getElementById('layerList');
+        const maskImage = document.getElementById('maskImage');
         const colorPicker = document.getElementById('colorPicker');
         const colorText = document.getElementById('colorText');
         const opacityPicker = document.getElementById('opacityPicker');
         const opacityLabel = document.getElementById('opacityLabel');
 
         lucide.createIcons();
+
+        // Handle Map Loading for Mask
+        function onMapLoaded(src) {
+            maskImage.setAttribute('href', src);
+        }
+
+        function onMapError(img) {
+            if (img.src !== FALLBACK_URL) {
+                img.src = FALLBACK_URL;
+                maskImage.setAttribute('href', FALLBACK_URL);
+            }
+        }
+
+        // Keyboard support
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') undo();
+                if (e.key === 'y') redo();
+            }
+        });
 
         workspace.addEventListener('mousedown', (e) => {
             if (currentTool === 'inspect') return;
@@ -196,19 +213,12 @@
         window.addEventListener('mouseup', () => {
             if (!isDrawing) return;
             isDrawing = false;
-            if (currentPoints.length > 5) {
+            if (currentPoints.length > 3) {
                 const path = getSmoothingPath(currentPoints);
                 if (path) {
                     if (currentTool === 'draw') {
-                        regions.push({
-                            path,
-                            color: colorPicker.value,
-                            opacity: parseFloat(opacityPicker.value),
-                            id: Date.now(),
-                            name: `Region ${regions.length + 1}`
-                        });
-                        activeRegionIndex = regions.length - 1;
-                    } else {
+                        drawnPaths.push(path);
+                    } else if (currentTool === 'erase') {
                         eraserPaths.push(path);
                     }
                     saveHistory();
@@ -256,59 +266,21 @@
         }
 
         function render() {
-            regionsGroup.innerHTML = regions.map((r, i) => `
-                <path d="${r.path}" fill="${r.color}" fill-opacity="${r.opacity}" 
-                style="transition: all 0.3s;" />
-            `).join('');
+            // Update path string
+            mainZonePath.setAttribute('d', drawnPaths.join(' '));
+            mainZonePath.setAttribute('fill', colorPicker.value);
+            mainZonePath.setAttribute('fill-opacity', opacityPicker.value);
 
-            eraserGroup.innerHTML = eraserPaths.map(p => `
-                <path d="${p}" fill="black" />
-            `).join('');
+            // Update erasers
+            eraserGroup.innerHTML = eraserPaths.map(p => `<path d="${p}" fill="black" />`).join('');
 
-            layerList.innerHTML = '';
-            if (eraserPaths.length > 0) {
-                const eraseBtn = document.createElement('button');
-                eraseBtn.className = "w-full py-2 text-[9px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest border border-dashed border-red-100 rounded-xl mb-4";
-                eraseBtn.innerText = `Clear Erasures (${eraserPaths.length})`;
-                eraseBtn.onclick = () => { eraserPaths = []; saveHistory(); render(); };
-                layerList.appendChild(eraseBtn);
-            }
-
-            regions.forEach((r, i) => {
-                const div = document.createElement('div');
-                div.className = `group flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer ${activeRegionIndex === i ? 'border-emerald-500 bg-white shadow-md scale-[1.02]' : 'border-transparent hover:bg-slate-50 bg-white/50 text-slate-500'}`;
-                div.onclick = () => { activeRegionIndex = i; updateUIFromSelected(); render(); };
-                div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="w-3 h-3 rounded-full border border-black/5" style="background-color: ${r.color}"></div>
-                        <span class="text-[11px] font-bold truncate max-w-[80px]">${r.name}</span>
-                    </div>
-                    <button onclick="deleteRegion(${i})" class="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    </button>
-                `;
-                layerList.appendChild(div);
-            });
-            lucide.createIcons();
-        }
-
-        function deleteRegion(idx) {
-            event.stopPropagation();
-            regions.splice(idx, 1);
-            activeRegionIndex = null;
-            saveHistory();
-            render();
+            updateHistoryButtons();
         }
 
         function updateCurrentStyle() {
             colorText.value = colorPicker.value.toUpperCase();
             opacityLabel.innerText = Math.round(opacityPicker.value * 100) + '%';
-            if (activeRegionIndex !== null && regions[activeRegionIndex]) {
-                regions[activeRegionIndex].color = colorPicker.value;
-                regions[activeRegionIndex].opacity = parseFloat(opacityPicker.value);
-                saveHistory();
-                render();
-            }
+            render();
         }
 
         function updateFromText(val) {
@@ -318,34 +290,22 @@
             }
         }
 
-        function updateUIFromSelected() {
-            if (activeRegionIndex !== null && regions[activeRegionIndex]) {
-                const r = regions[activeRegionIndex];
-                colorPicker.value = r.color;
-                colorText.value = r.color.toUpperCase();
-                opacityPicker.value = r.opacity;
-                opacityLabel.innerText = Math.round(r.opacity * 100) + '%';
-            }
-        }
-
         function saveHistory() {
             history = history.slice(0, historyStep + 1);
             history.push({
-                regions: JSON.parse(JSON.stringify(regions)),
+                drawnPaths: [...drawnPaths],
                 eraserPaths: [...eraserPaths]
             });
             historyStep++;
-            updateHistoryButtons();
         }
 
         function undo() {
             if (historyStep > 0) {
                 historyStep--;
                 const state = history[historyStep];
-                regions = JSON.parse(JSON.stringify(state.regions));
+                drawnPaths = [...state.drawnPaths];
                 eraserPaths = [...state.eraserPaths];
                 render();
-                updateHistoryButtons();
             }
         }
 
@@ -353,10 +313,9 @@
             if (historyStep < history.length - 1) {
                 historyStep++;
                 const state = history[historyStep];
-                regions = JSON.parse(JSON.stringify(state.regions));
+                drawnPaths = [...state.drawnPaths];
                 eraserPaths = [...state.eraserPaths];
                 render();
-                updateHistoryButtons();
             }
         }
 
@@ -372,10 +331,9 @@
         }
 
         function resetAll() {
-            if (confirm("Reset everything?")) {
-                regions = [];
+            if (confirm("Reset the grow zone? This cannot be undone.")) {
+                drawnPaths = [];
                 eraserPaths = [];
-                activeRegionIndex = null;
                 saveHistory();
                 render();
             }
@@ -403,18 +361,16 @@
             sCtx.scale(scaleX, scaleY);
             sCtx.translate(-MAP_X, -MAP_Y);
 
-            regions.forEach(r => {
-                const p = new Path2D(r.path);
-                sCtx.globalAlpha = r.opacity;
-                sCtx.fillStyle = r.color;
-                sCtx.fill(p);
-            });
+            const p = new Path2D(drawnPaths.join(' '));
+            sCtx.globalAlpha = parseFloat(opacityPicker.value);
+            sCtx.fillStyle = colorPicker.value;
+            sCtx.fill(p);
 
             sCtx.globalAlpha = 1.0;
             sCtx.globalCompositeOperation = 'destination-out';
-            eraserPaths.forEach(pData => {
-                const p = new Path2D(pData);
-                sCtx.fill(p);
+            eraserPaths.forEach(pathStr => {
+                const ep = new Path2D(pathStr);
+                sCtx.fill(ep);
             });
 
             sCtx.setTransform(1, 0, 0, 1, 0, 0); 
@@ -427,10 +383,10 @@
                 const url = canvas.toDataURL("image/png");
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `jrk-growth-map-1600x1000-${Date.now()}.png`;
+                a.download = `jrk-grow-zone-${Date.now()}.png`;
                 a.click();
             } catch (e) {
-                alert("Download failed. CORS restriction detected.\n\nFIX: Ensure us-48.png is hosted on your Netlify domain sitting next to builder.html.");
+                alert("Download failed. This usually happens if the map image is blocked by security settings. Please ensure us-48.png is in the same folder as this tool on your server.");
             }
         }
 
