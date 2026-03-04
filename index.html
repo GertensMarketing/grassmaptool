@@ -26,6 +26,7 @@
     <!-- Header -->
     <header class="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center z-30 shadow-sm">
         <div class="flex items-center gap-4">
+            <!-- Company Logo -->
             <img id="headerLogo" src="Small-BC-logo.png" alt="Logo" class="h-10 w-auto" onerror="this.src='https://jrkmapmaker.netlify.app/Small-BC-logo.png'">
             <div>
                 <h1 class="text-lg font-bold text-slate-800 leading-tight">JRK Grow Zone Map Builder</h1>
@@ -98,10 +99,9 @@
                 </div>
             </section>
 
-            <section class="flex-1 flex flex-col min-h-0 border-t border-slate-100 pt-6">
-                <p class="text-[10px] text-slate-400 font-medium leading-relaxed italic text-center">
-                    All drawn areas belong to a single Grow Zone. Use Undo to remove your last stroke.
-                </p>
+            <!-- Bottom Logo Placement -->
+            <section class="mt-auto pt-4 border-t border-slate-100 flex justify-center">
+                <img src="Full-BC-logo.png" alt="Full Logo" class="w-full h-auto opacity-80" onerror="this.src='https://jrkmapmaker.netlify.app/Full-BC-logo.png'">
             </section>
         </aside>
 
@@ -125,9 +125,12 @@
                             </mask>
                         </defs>
                         
-                        <g mask="url(#us-mask)">
-                            <g mask="url(#exclusion-mask)">
-                                <path id="mainZonePath" d="" fill="#20462d" fill-opacity="0.55" />
+                        <!-- Opacity is applied to the GROUP level to allow overlapping strokes to merge perfectly -->
+                        <g id="zoneGroup" opacity="0.55">
+                            <g mask="url(#us-mask)">
+                                <g mask="url(#exclusion-mask)" id="pathContainer">
+                                    <!-- Individual paths are rendered here -->
+                                </g>
                             </g>
                         </g>
 
@@ -166,7 +169,8 @@
 
         const workspace = document.getElementById('workspace');
         const feedbackLine = document.getElementById('feedbackLine');
-        const mainZonePath = document.getElementById('mainZonePath');
+        const zoneGroup = document.getElementById('zoneGroup');
+        const pathContainer = document.getElementById('pathContainer');
         const eraserGroup = document.getElementById('eraserGroup');
         const maskImage = document.getElementById('maskImage');
         const colorPicker = document.getElementById('colorPicker');
@@ -176,7 +180,6 @@
 
         lucide.createIcons();
 
-        // Handle Map Loading for Mask
         function onMapLoaded(src) {
             maskImage.setAttribute('href', src);
         }
@@ -188,11 +191,10 @@
             }
         }
 
-        // Keyboard support
         window.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'z') undo();
-                if (e.key === 'y') redo();
+                if (e.key === 'z') { e.preventDefault(); undo(); }
+                if (e.key === 'y') { e.preventDefault(); redo(); }
             }
         });
 
@@ -234,9 +236,7 @@
             currentTool = tool;
             ['drawTool', 'eraseTool', 'inspectTool'].forEach(id => document.getElementById(id).classList.remove('tool-active'));
             document.getElementById(tool + 'Tool').classList.add('tool-active');
-            
             workspace.style.cursor = tool === 'inspect' ? 'default' : 'crosshair';
-            
             const statusText = document.getElementById('statusText');
             const statusDot = document.getElementById('statusDot');
             if (tool === 'draw') { statusText.innerText = 'Addition Mode'; statusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse'; }
@@ -267,12 +267,16 @@
         }
 
         function render() {
-            // Update path string
-            mainZonePath.setAttribute('d', drawnPaths.join(' '));
-            mainZonePath.setAttribute('fill', colorPicker.value);
-            mainZonePath.setAttribute('fill-opacity', opacityPicker.value);
+            // Render individual paths at full opacity inside the container
+            // This ensures overlapping strokes merge instead of subtracting
+            pathContainer.innerHTML = drawnPaths.map(d => 
+                `<path d="${d}" fill="${colorPicker.value}" fill-opacity="1" />`
+            ).join('');
 
-            // Update erasers
+            // Apply opacity to the whole group
+            zoneGroup.setAttribute('opacity', opacityPicker.value);
+
+            // Render erasers in the exclusion mask
             eraserGroup.innerHTML = eraserPaths.map(p => `<path d="${p}" fill="black" />`).join('');
 
             updateHistoryButtons();
@@ -351,34 +355,38 @@
             const ctx = canvas.getContext('2d');
             canvas.width = EXPORT_WIDTH;
             canvas.height = EXPORT_HEIGHT;
-
             ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
             const sCanvas = document.createElement('canvas');
             sCanvas.width = EXPORT_WIDTH;
             sCanvas.height = EXPORT_HEIGHT;
             const sCtx = sCanvas.getContext('2d');
-            
             sCtx.scale(scaleX, scaleY);
             sCtx.translate(-MAP_X, -MAP_Y);
 
-            const p = new Path2D(drawnPaths.join(' '));
-            sCtx.globalAlpha = parseFloat(opacityPicker.value);
+            // Draw paths at 1.0 opacity on the scratch canvas
             sCtx.fillStyle = colorPicker.value;
-            sCtx.fill(p);
+            drawnPaths.forEach(d => {
+                const p = new Path2D(d);
+                sCtx.fill(p);
+            });
 
-            sCtx.globalAlpha = 1.0;
+            // Subtract erasers
             sCtx.globalCompositeOperation = 'destination-out';
             eraserPaths.forEach(pathStr => {
                 const ep = new Path2D(pathStr);
                 sCtx.fill(ep);
             });
 
+            // Land Lock masking
             sCtx.setTransform(1, 0, 0, 1, 0, 0); 
             sCtx.globalCompositeOperation = 'destination-in';
             sCtx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
 
+            // Now draw the scratch canvas to main canvas with the desired transparency
+            ctx.globalAlpha = parseFloat(opacityPicker.value);
             ctx.drawImage(sCanvas, 0, 0);
+            ctx.globalAlpha = 1.0;
 
             try {
                 const url = canvas.toDataURL("image/png");
@@ -387,7 +395,7 @@
                 a.download = `jrk-grow-zone-${Date.now()}.png`;
                 a.click();
             } catch (e) {
-                alert("Download failed. This usually happens if the map image is blocked by security settings. Please ensure us-48.png is in the same folder as this tool on your server.");
+                console.error("Download failed:", e);
             }
         }
 
